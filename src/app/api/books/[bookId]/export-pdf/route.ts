@@ -15,14 +15,18 @@ export async function POST(
     const repository = getDesignRepository();
     const record = await repository.getDesignByBookId(bookId);
 
-    if (!record || !record.designJson) {
-      return NextResponse.json(
-        { error: "No design found to export for this book." },
-        { status: 404 },
-      );
+    let design = record?.designJson;
+    if (!design) {
+      if (bookId.startsWith("demo")) {
+        const { getDemoDesign } = await import("@/lib/editor/demo");
+        design = getDemoDesign();
+      } else {
+        return NextResponse.json(
+          { error: "No design found to export for this book." },
+          { status: 404 },
+        );
+      }
     }
-
-    const design = record.designJson;
 
     // Collect all asset IDs in design
     const assets = new Map<string, RenderAsset>();

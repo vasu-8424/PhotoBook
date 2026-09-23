@@ -21,21 +21,52 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Parts 1 – 6 Complete
+                Parts 1 – 8 Complete
               </span>
             </div>
           </div>
         </header>
 
         {/* Feature Navigation Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition">
-            <h2 className="text-lg font-semibold text-white">
-              Part 4 — Photo Asset Pipeline
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Upload photos, strip EXIF metadata, normalize orientation, and generate controlled derivatives.
-            </p>
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-violet-500/20 text-violet-300 rounded border border-violet-500/30">
+                  Part 8 New
+                </span>
+              </div>
+              <h2 className="text-lg font-semibold text-white mt-2">
+                Book Preview &amp; Konva Editor
+              </h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Interactive browser canvas editor. Move, resize, edit typography, inspect spreads, and export print-ready vector PDF.
+              </p>
+            </div>
+            <div className="mt-4">
+              <Link
+                href="/book/demo-magazine/edit"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition shadow-lg shadow-violet-600/20"
+              >
+                Open Book Editor &rarr;
+              </Link>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30">
+                  Part 4
+                </span>
+              </div>
+              <h2 className="text-lg font-semibold text-white mt-2">
+                Photo Asset Pipeline
+              </h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Upload photos, strip EXIF metadata, normalize orientation, and generate controlled derivatives.
+              </p>
+            </div>
             <div className="mt-4">
               <Link
                 href="/dev/photos"
@@ -46,13 +77,20 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition">
-            <h2 className="text-lg font-semibold text-white">
-              Part 2 — Deterministic Print Engine
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Server-side PDF generation from physical millimeter coordinates, Inter fonts, and vectors.
-            </p>
+          <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-zinc-500/20 text-zinc-300 rounded border border-zinc-500/30">
+                  Part 2
+                </span>
+              </div>
+              <h2 className="text-lg font-semibold text-white mt-2">
+                Deterministic Print Engine
+              </h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Server-side PDF generation from physical millimeter coordinates, Inter fonts, and vectors.
+              </p>
+            </div>
             <div className="mt-4">
               <a
                 href="/api/test-pdf"
@@ -71,7 +109,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-white mb-4">
             System Modules &amp; Architecture Status
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
             <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/80">
               <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Part 1</div>
               <div className="text-white font-medium mt-0.5">Canonical Design JSON</div>
@@ -101,6 +139,16 @@ export default function Home() {
               <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Part 6</div>
               <div className="text-white font-medium mt-0.5">Editorial AI &amp; Sequencing</div>
               <div className="text-emerald-400 text-xs mt-1">✓ EditorialPlan v1.0.0</div>
+            </div>
+            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/80">
+              <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Part 7</div>
+              <div className="text-white font-medium mt-0.5">Design AI &amp; Layout</div>
+              <div className="text-emerald-400 text-xs mt-1">✓ Design JSON v1.0.0</div>
+            </div>
+            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/80">
+              <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Part 8</div>
+              <div className="text-white font-medium mt-0.5">Preview &amp; Konva Editor</div>
+              <div className="text-emerald-400 text-xs mt-1">✓ Canvas &amp; Vector Export</div>
             </div>
           </div>
         </section>

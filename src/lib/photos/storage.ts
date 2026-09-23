@@ -95,7 +95,7 @@ export class InMemoryStorageProvider implements StorageProvider {
       );
     }
     const expires = options?.expiresInSeconds ?? 300;
-    return `https://storage.memorymagazine.internal/${bucket}/signed/${path}?expires=${expires}&signature=mock_sig`;
+    return `/api/photos/view/${bucket}/${path}?expires=${expires}&signature=mock_sig`;
   }
 
   public async deleteFiles(bucket: string, paths: string[]): Promise<void> {

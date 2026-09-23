@@ -17,6 +17,15 @@ export async function GET(
     const record = await repository.getDesignByBookId(bookId);
 
     if (!record || !record.designJson) {
+      if (bookId.startsWith("demo")) {
+        const { getDemoDesign } = await import("@/lib/editor/demo");
+        return NextResponse.json({
+          design: getDemoDesign(),
+          model: "demo-preset",
+          promptVersion: "v1.0.0",
+          updatedAt: new Date().toISOString(),
+        });
+      }
       return NextResponse.json(
         { error: "Design not found for this book." },
         { status: 404 },
