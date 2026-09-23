@@ -25,6 +25,7 @@ const VALID_LAYOUT_TYPES = new Set([
 
 const VALID_FIT_MODES = new Set(["COVER", "CONTAIN", "FILL"]);
 const VALID_SHAPES = new Set(["rectangle", "line", "circle"]);
+const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
 export function validateDesign(
   design: BookDesign,
@@ -34,7 +35,15 @@ export function validateDesign(
   const errors: PrintValidationIssue[] = [];
   const warnings: PrintValidationIssue[] = [];
 
-  const targetDpi = options?.outputDpi ?? design.document.dpi ?? DEFAULT_DPI;
+  const targetDpi = options?.outputDpi ?? design?.document?.dpi ?? DEFAULT_DPI;
+
+  if (!design || !design.document) {
+    errors.push({
+      code: "INVALID_DESIGN",
+      message: "Missing Design JSON document root.",
+    });
+    return { valid: false, errors, warnings };
+  }
 
   // 1. Document validation
   if (design.schemaVersion !== DESIGN_SCHEMA_VERSION) {
@@ -74,7 +83,12 @@ export function validateDesign(
     });
   }
 
-  if (dpi !== undefined && dpi < 72) {
+  if (dpi !== undefined && dpi <= 0) {
+    errors.push({
+      code: "INVALID_DESIGN",
+      message: `DPI must be greater than 0. Got: ${dpi}.`,
+    });
+  } else if (dpi !== undefined && dpi < 72) {
     warnings.push({
       code: "IMAGE_RESOLUTION_TOO_LOW",
       message: `Document configured DPI is unusually low: ${dpi} DPI.`,
@@ -85,6 +99,8 @@ export function validateDesign(
 
   // 2. Page validations
   const pageIdSet = new Set<string>();
+  const elementIdSet = new Set<string>();
+  const pageOrderMap = new Map<string, number>();
 
   for (const page of design.pages) {
     if (!page.id) {
@@ -104,12 +120,14 @@ export function validateDesign(
     }
     pageIdSet.add(page.id);
 
-    if (page.pageNumber === undefined || page.pageNumber < 0) {
+    if (page.pageNumber === undefined || typeof page.pageNumber !== "number" || page.pageNumber < 1 || !Number.isInteger(page.pageNumber)) {
       errors.push({
         code: "INVALID_DESIGN",
-        message: `Invalid page number: ${page.pageNumber}.`,
+        message: `Invalid page number: ${page.pageNumber}. Must be a positive integer.`,
         pageId: page.id,
       });
+    } else {
+      pageOrderMap.set(page.id, page.pageNumber);
     }
 
     if (!VALID_LAYOUT_TYPES.has(page.layoutType)) {
@@ -130,6 +148,16 @@ export function validateDesign(
         });
         continue;
       }
+
+      if (elementIdSet.has(element.id)) {
+        errors.push({
+          code: "INVALID_ELEMENT",
+          message: `Duplicate element ID '${element.id}' within document.`,
+          pageId: page.id,
+          elementId: element.id,
+        });
+      }
+      elementIdSet.add(element.id);
 
       if (element.widthMm <= 0 || element.heightMm <= 0) {
         errors.push({
@@ -208,6 +236,14 @@ export function validateDesign(
               });
             }
           }
+          if (element.opacity !== undefined && (element.opacity < 0 || element.opacity > 1)) {
+            errors.push({
+              code: "INVALID_ELEMENT",
+              message: `Invalid opacity '${element.opacity}' on image '${element.id}'. Must be between 0.0 and 1.0.`,
+              pageId: page.id,
+              elementId: element.id,
+            });
+          }
           break;
         }
 
@@ -221,7 +257,14 @@ export function validateDesign(
             });
           }
 
-          if (!element.fontFamily || !hasFont(element.fontFamily, element.fontWeight)) {
+          if (typeof element.fontWeight !== "number" || element.fontWeight <= 0) {
+            errors.push({
+              code: "INVALID_FONT",
+              message: `Invalid font weight '${element.fontWeight}' on text element '${element.id}'. Must be a positive numeric weight.`,
+              pageId: page.id,
+              elementId: element.id,
+            });
+          } else if (!element.fontFamily || !hasFont(element.fontFamily, element.fontWeight)) {
             errors.push({
               code: "MISSING_FONT",
               message: `Font '${element.fontFamily}' with weight ${element.fontWeight} is not registered in the font registry.`,
@@ -234,6 +277,15 @@ export function validateDesign(
             errors.push({
               code: "INVALID_ELEMENT",
               message: `Text element '${element.id}' has invalid font size: ${element.fontSizePt} pt.`,
+              pageId: page.id,
+              elementId: element.id,
+            });
+          }
+
+          if (element.color && !HEX_COLOR_REGEX.test(element.color)) {
+            errors.push({
+              code: "INVALID_ELEMENT",
+              message: `Invalid color format '${element.color}' on text element '${element.id}'. Expected '#RRGGBB'.`,
               pageId: page.id,
               elementId: element.id,
             });
@@ -284,6 +336,33 @@ export function validateDesign(
               elementId: element.id,
             });
           }
+
+          if (element.fill && !HEX_COLOR_REGEX.test(element.fill)) {
+            errors.push({
+              code: "INVALID_ELEMENT",
+              message: `Invalid fill color '${element.fill}' on shape '${element.id}'. Expected '#RRGGBB'.`,
+              pageId: page.id,
+              elementId: element.id,
+            });
+          }
+
+          if (element.stroke && !HEX_COLOR_REGEX.test(element.stroke)) {
+            errors.push({
+              code: "INVALID_ELEMENT",
+              message: `Invalid stroke color '${element.stroke}' on shape '${element.id}'. Expected '#RRGGBB'.`,
+              pageId: page.id,
+              elementId: element.id,
+            });
+          }
+
+          if (element.strokeWidthMm !== undefined && element.strokeWidthMm < 0) {
+            errors.push({
+              code: "INVALID_ELEMENT",
+              message: `Invalid stroke width '${element.strokeWidthMm}' on shape '${element.id}'. Must be non-negative.`,
+              pageId: page.id,
+              elementId: element.id,
+            });
+          }
           break;
         }
 
@@ -299,7 +378,12 @@ export function validateDesign(
   }
 
   // 3. Spread validations
+  const participatingPages = new Set<string>();
+
   for (const spread of design.spreads) {
+    const leftNum = spread.leftPageId ? pageOrderMap.get(spread.leftPageId) : undefined;
+    const rightNum = spread.rightPageId ? pageOrderMap.get(spread.rightPageId) : undefined;
+
     if (!spread.leftPageId || !pageIdSet.has(spread.leftPageId)) {
       errors.push({
         code: "INVALID_SPREAD",
@@ -318,6 +402,35 @@ export function validateDesign(
       errors.push({
         code: "INVALID_SPREAD",
         message: `Spread '${spread.id}' has identical left and right page ID '${spread.leftPageId}'.`,
+      });
+    }
+
+    // A page can participate in at most one spread in v1.0.0
+    if (spread.leftPageId) {
+      if (participatingPages.has(spread.leftPageId)) {
+        errors.push({
+          code: "INVALID_SPREAD",
+          message: `Page '${spread.leftPageId}' already participates in another spread. A page can participate in at most one spread in v1.0.0.`,
+        });
+      }
+      participatingPages.add(spread.leftPageId);
+    }
+
+    if (spread.rightPageId) {
+      if (participatingPages.has(spread.rightPageId)) {
+        errors.push({
+          code: "INVALID_SPREAD",
+          message: `Page '${spread.rightPageId}' already participates in another spread. A page can participate in at most one spread in v1.0.0.`,
+        });
+      }
+      participatingPages.add(spread.rightPageId);
+    }
+
+    // Left page must occur immediately before right page
+    if (leftNum !== undefined && rightNum !== undefined && leftNum + 1 !== rightNum) {
+      errors.push({
+        code: "INVALID_SPREAD",
+        message: `Spread '${spread.id}' left page '${spread.leftPageId}' (page ${leftNum}) must occur immediately before right page '${spread.rightPageId}' (page ${rightNum}).`,
       });
     }
 
