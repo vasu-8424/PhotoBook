@@ -3,8 +3,8 @@ import type { OperationConfig } from "@/lib/ai/types";
 
 export const PHOTO_ANALYSIS_PROMPT_VERSION = "photo-analysis-v1";
 
-// Explicit fixed free multimodal model for reproducible debugging & consistent prompt/schema testing
-export const DEFAULT_FIXED_FREE_VISION_MODEL = "google/gemma-4-26b-a4b-it:free";
+// Active free multimodal & reasoning models verified on OpenRouter
+export const DEFAULT_FIXED_FREE_VISION_MODEL = "openrouter/free";
 export const OPENROUTER_FREE_ROUTER = "openrouter/free";
 
 export const VISION_CONFIG = {
@@ -35,16 +35,14 @@ export const DESIGN_CONFIG = {
 export const AI_OPERATION_CONFIGS: Record<AIOperation, OperationConfig> = {
   PHOTO_ANALYSIS: {
     operation: "PHOTO_ANALYSIS",
-    // Uses explicit fixed free vision model first for consistent debugging & schema validation.
-    // Can be switched to OPENROUTER_FREE_ROUTER via PHOTO_ANALYSIS_MODEL="openrouter/free"
     primaryModel:
       process.env.PHOTO_ANALYSIS_TEST_MODEL ||
       process.env.PHOTO_ANALYSIS_MODEL ||
       DEFAULT_FIXED_FREE_VISION_MODEL,
-    // Compatible free multimodal / vision models
+    // Active free multimodal / vision models
     fallbackModels: [
-      "google/gemma-4-31b-it:free",
-      "inclusionai/ling-3.0-flash-vl:free",
+      "nex-agi/nex-n2.5-mini:free",
+      "nex-agi/nex-n2.5-pro:free",
       OPENROUTER_FREE_ROUTER,
     ],
     promptVersion: PHOTO_ANALYSIS_PROMPT_VERSION,
@@ -64,15 +62,15 @@ export const AI_OPERATION_CONFIGS: Record<AIOperation, OperationConfig> = {
       process.env.EDITORIAL_PLANNING_TEST_MODEL ||
       process.env.EDITORIAL_PLANNING_MODEL ||
       DEFAULT_FIXED_FREE_VISION_MODEL,
-    // Compatible free reasoning & structured JSON narrative models
+    // Active free reasoning & narrative models
     fallbackModels: [
-      "google/gemma-4-31b-it:free",
-      "inclusionai/ling-3.0-flash-vl:free",
+      "nex-agi/nex-n2.5-mini:free",
+      "nex-agi/nex-n2.5-pro:free",
       OPENROUTER_FREE_ROUTER,
     ],
     promptVersion: EDITORIAL_PROMPT_VERSION,
     timeoutMs: 60000,
-    maxCostUsd: 0.05,
+    maxCostUsd: 0.10,
     temperature: 0.2,
     providerRouting: {
       allow_fallbacks: true,
@@ -87,15 +85,15 @@ export const AI_OPERATION_CONFIGS: Record<AIOperation, OperationConfig> = {
       process.env.DESIGN_PLANNING_TEST_MODEL ||
       process.env.DESIGN_PLANNING_MODEL ||
       DEFAULT_FIXED_FREE_VISION_MODEL,
-    // Compatible free structured JSON layout models
+    // Active free structured JSON layout models
     fallbackModels: [
-      "google/gemma-4-31b-it:free",
-      "inclusionai/ling-3.0-flash-vl:free",
+      "nex-agi/nex-n2.5-mini:free",
+      "nex-agi/nex-n2.5-pro:free",
       OPENROUTER_FREE_ROUTER,
     ],
     promptVersion: DESIGN_PROMPT_VERSION,
     timeoutMs: 60000,
-    maxCostUsd: 0.05,
+    maxCostUsd: 0.10,
     temperature: 0.2,
     providerRouting: {
       allow_fallbacks: true,

@@ -21,11 +21,41 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Parts 1 – 8 Complete
+                Parts 1 – 9 Complete
               </span>
             </div>
           </div>
         </header>
+
+        {/* Part 9 Production Hero Banner */}
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-950/60 via-indigo-950/40 to-zinc-900 border border-violet-800/40 p-6 md:p-8">
+          <div className="max-w-2xl space-y-3">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+              Part 9 — Production Workflow &amp; Orchestration
+            </div>
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              Create an AI-Generated Magazine in Minutes
+            </h2>
+            <p className="text-zinc-300 text-sm leading-relaxed">
+              Upload personal photos and orchestrate the full end-to-end pipeline: secure processing, visual AI understanding, narrative editorial planning, dynamic print layout, interactive Konva editing, and vector print-ready PDF export.
+            </p>
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <Link
+                href="/book/new"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-sm transition shadow-lg shadow-violet-600/30"
+              >
+                Create New Magazine &rarr;
+              </Link>
+              <Link
+                href="/book/demo-magazine"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 text-sm font-medium transition"
+              >
+                View Generation Status &rarr;
+              </Link>
+            </div>
+          </div>
+        </section>
 
         {/* Feature Navigation Cards */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -33,7 +63,7 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-violet-500/20 text-violet-300 rounded border border-violet-500/30">
-                  Part 8 New
+                  Part 8
                 </span>
               </div>
               <h2 className="text-lg font-semibold text-white mt-2">
@@ -149,6 +179,11 @@ export default function Home() {
               <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Part 8</div>
               <div className="text-white font-medium mt-0.5">Preview &amp; Konva Editor</div>
               <div className="text-emerald-400 text-xs mt-1">✓ Canvas &amp; Vector Export</div>
+            </div>
+            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/80">
+              <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Part 9</div>
+              <div className="text-white font-medium mt-0.5">Production Orchestration</div>
+              <div className="text-emerald-400 text-xs mt-1">✓ Workflows &amp; Inngest</div>
             </div>
           </div>
         </section>

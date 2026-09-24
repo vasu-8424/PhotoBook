@@ -117,7 +117,64 @@ CRITICAL EDITORIAL RULES:
    - 'narrativeSummary': 1 to 3 concise sentences summarizing the editorial story arc.
 7. PACING & CONFIDENCE:
    - 'pacing': opening ("SLOW"|"MODERATE"|"IMMEDIATE"), middle ("SLOW"|"MODERATE"|"FAST"), ending ("QUIET"|"REFLECTIVE"|"ENERGETIC"), rhythm ("CALM"|"BALANCED"|"DYNAMIC").
-   - 'confidence': sub-scores from 0.0 to 1.0 for overall, narrative, grouping, pacing, captions.`;
+   - 'confidence': sub-scores from 0.0 to 1.0 for overall, narrative, grouping, pacing, captions.
+
+REQUIRED JSON STRUCTURE:
+You must output a JSON object adhering exactly to this structure:
+{
+  "schemaVersion": "1.0.0",
+  "bookId": "<bookId from input>",
+  "title": "String title",
+  "titleCandidates": ["Alternative Title 1", "Alternative Title 2", "Alternative Title 3"],
+  "narrativeSummary": "1 to 3 concise sentences summarizing the narrative arc.",
+  "chapters": [
+    {
+      "id": "chapter_1",
+      "title": "Chapter Title",
+      "summary": "Chapter summary",
+      "photoIds": ["<photoId1>", "<photoId2>"],
+      "order": 1,
+      "mood": "VIBRANT"
+    }
+  ],
+  "photoSequence": [
+    {
+      "photoId": "<photoId1>",
+      "sequence": 1,
+      "chapterId": "chapter_1",
+      "role": "OPENING",
+      "importance": 0.95,
+      "transitionReason": "Arrival scene"
+    }
+  ],
+  "coverCandidateIds": ["<photoId1>", "<photoId2>"],
+  "openingPhotoId": "<photoId1>",
+  "closingPhotoId": "<photoIdN>",
+  "pacing": {
+    "opening": "MODERATE",
+    "middle": "MODERATE",
+    "ending": "REFLECTIVE",
+    "rhythm": "BALANCED"
+  },
+  "captions": [
+    {
+      "photoId": "<photoId1>",
+      "text": "Polished caption under max word limit.",
+      "style": "EDITORIAL",
+      "confidence": 0.95
+    }
+  ],
+  "editorialNotes": [
+    "Editorial rationale on photo grouping and flow."
+  ],
+  "confidence": {
+    "overall": 0.9,
+    "narrative": 0.9,
+    "grouping": 0.9,
+    "pacing": 0.9,
+    "captions": 0.9
+  }
+}`;
 }
 
 export function buildEditorialUserPrompt(input: EditorialInput): string {

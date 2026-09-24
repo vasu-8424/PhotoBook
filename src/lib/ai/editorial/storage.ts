@@ -135,14 +135,17 @@ export class SupabaseEditorialPlanRepository implements EditorialPlanRepository 
   }
 }
 
-// Global active repository instance (defaults to InMemory for local dev / testing)
-let activeRepository: EditorialPlanRepository =
-  new InMemoryEditorialPlanRepository();
+const globalForEditorial = globalThis as unknown as {
+  activeEditorialRepository?: EditorialPlanRepository;
+};
 
 export function setEditorialRepository(repo: EditorialPlanRepository): void {
-  activeRepository = repo;
+  globalForEditorial.activeEditorialRepository = repo;
 }
 
 export function getEditorialRepository(): EditorialPlanRepository {
-  return activeRepository;
+  if (!globalForEditorial.activeEditorialRepository) {
+    globalForEditorial.activeEditorialRepository = new InMemoryEditorialPlanRepository();
+  }
+  return globalForEditorial.activeEditorialRepository;
 }

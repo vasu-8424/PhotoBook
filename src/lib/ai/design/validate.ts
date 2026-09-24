@@ -13,15 +13,23 @@ import { APPROVED_FONTS, APPROVED_FONT_WEIGHTS } from "./types";
 export function repairDesignGeometry(design: BookDesign): BookDesign {
   const round = (val: number): number => Math.round(val * 100) / 100;
 
+  const widthMm = round(design.document.widthMm);
+  const heightMm = round(design.document.heightMm);
+  const bleedMm = round(design.document.bleedMm);
+  const safeAreaMm = round(design.document.safeAreaMm);
+  const gutterMm = round(design.document.gutterMm);
+
+  const safeArea = getSafeAreaMm(widthMm, heightMm, safeAreaMm);
+
   return {
     ...design,
     document: {
       ...design.document,
-      widthMm: round(design.document.widthMm),
-      heightMm: round(design.document.heightMm),
-      bleedMm: round(design.document.bleedMm),
-      safeAreaMm: round(design.document.safeAreaMm),
-      gutterMm: round(design.document.gutterMm),
+      widthMm,
+      heightMm,
+      bleedMm,
+      safeAreaMm,
+      gutterMm,
     },
     pages: design.pages.map((page) => ({
       ...page,
@@ -35,15 +43,47 @@ export function repairDesignGeometry(design: BookDesign): BookDesign {
             heightMm: round(el.heightMm),
           };
         } else if (el.type === "text") {
+          let xMm = round(el.xMm);
+          let yMm = round(el.yMm);
+          let widthMm = round(el.widthMm);
+          let heightMm = round(el.heightMm);
+
+          // Clamping text bounding box inside safe area with tolerance
+          if (xMm < safeArea.minX) {
+            const shift = safeArea.minX - xMm;
+            xMm = safeArea.minX;
+            widthMm = Math.max(10, widthMm - shift);
+          }
+          if (xMm + widthMm > safeArea.maxX) {
+            widthMm = Math.max(10, safeArea.maxX - xMm);
+          }
+          if (yMm < safeArea.minY) {
+            const shift = safeArea.minY - yMm;
+            yMm = safeArea.minY;
+            heightMm = Math.max(5, heightMm - shift);
+          }
+          if (yMm + heightMm > safeArea.maxY) {
+            heightMm = Math.max(5, safeArea.maxY - yMm);
+          }
+
+          const fontFamily = APPROVED_FONTS.includes(el.fontFamily)
+            ? el.fontFamily
+            : "Inter";
+          const fontWeight = (APPROVED_FONT_WEIGHTS as readonly number[]).includes(el.fontWeight)
+            ? el.fontWeight
+            : 400;
+
           return {
             ...el,
-            xMm: round(el.xMm),
-            yMm: round(el.yMm),
-            widthMm: round(el.widthMm),
-            heightMm: round(el.heightMm),
-            fontSizePt: round(el.fontSizePt),
-            lineHeight: round(el.lineHeight),
-            letterSpacingPt: round(el.letterSpacingPt),
+            xMm: round(xMm),
+            yMm: round(yMm),
+            widthMm: round(widthMm),
+            heightMm: round(heightMm),
+            fontFamily,
+            fontWeight,
+            fontSizePt: round(el.fontSizePt || 12),
+            lineHeight: round(el.lineHeight || 1.2),
+            letterSpacingPt: round(el.letterSpacingPt || 0),
           };
         } else if (el.type === "shape") {
           return {

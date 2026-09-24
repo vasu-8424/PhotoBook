@@ -1,4 +1,4 @@
-export { AIGateway, aiGateway } from "./gateway";
+export { AIGateway, aiGateway, setGlobalAIGateway } from "./gateway";
 export { OpenRouterTransportClient } from "./client";
 export type { TransportClientOptions, TransportResult } from "./client";
 export { aiLogger } from "./logger";

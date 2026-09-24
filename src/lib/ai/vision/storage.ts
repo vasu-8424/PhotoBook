@@ -231,14 +231,17 @@ export class SupabasePhotoAnalysisRepository implements PhotoAnalysisRepository 
   }
 }
 
-// Active repository instance (defaults to InMemory for local dev / testing)
-let activeRepository: PhotoAnalysisRepository =
-  new InMemoryPhotoAnalysisRepository();
+const globalForVision = globalThis as unknown as {
+  activePhotoAnalysisRepository?: PhotoAnalysisRepository;
+};
 
 export function setAnalysisRepository(repo: PhotoAnalysisRepository): void {
-  activeRepository = repo;
+  globalForVision.activePhotoAnalysisRepository = repo;
 }
 
 export function getAnalysisRepository(): PhotoAnalysisRepository {
-  return activeRepository;
+  if (!globalForVision.activePhotoAnalysisRepository) {
+    globalForVision.activePhotoAnalysisRepository = new InMemoryPhotoAnalysisRepository();
+  }
+  return globalForVision.activePhotoAnalysisRepository;
 }

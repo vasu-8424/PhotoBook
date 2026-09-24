@@ -13,6 +13,7 @@ export default function BookEditorPage({ params }: PageProps) {
   const { bookId } = use(params);
 
   const [design, setDesign] = useState<BookDesign | null>(null);
+  const [assets, setAssets] = useState<Record<string, { previewUrl: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +37,9 @@ export default function BookEditorPage({ params }: PageProps) {
         const data = await res.json();
         if (isMounted) {
           setDesign(data.design);
+          if (data.assets) {
+            setAssets(data.assets);
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -131,6 +135,7 @@ export default function BookEditorPage({ params }: PageProps) {
       initialDesign={design}
       bookId={bookId}
       bookTitle="Mountain Horizons"
+      initialAssets={assets}
       onSave={handleSave}
       onExportPdf={handleExportPdf}
     />

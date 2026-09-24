@@ -3,6 +3,8 @@ import type {
   BookSize,
 } from "./design";
 
+export type { BookSize };
+
 export type BookOccasion =
   | "TRAVEL"
   | "PERSONAL_MEMORIES";
@@ -15,14 +17,20 @@ export type BookStyle =
 
 export type BookStatus =
   | "DRAFT"
+  | "CREATED"
+  | "QUEUED"
   | "UPLOADING"
-  | "ANALYZING"
+  | "PROCESSING_PHOTOS"
+  | "ANALYZING_PHOTOS"
+  | "CREATING_STORY"
   | "DESIGNING"
   | "PREVIEW_READY"
+  | "EDITING"
   | "EXPORTING"
   | "COMPLETED"
   | "FAILED"
-  | "EXPIRED";
+  | "EXPIRED"
+  | "CANCELLED";
 
 export interface Book {
   id: string;

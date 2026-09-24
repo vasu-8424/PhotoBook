@@ -89,6 +89,16 @@ export class OpenRouterTransportClient {
         // Successful HTTP response
         if (res.ok) {
           const data = (await res.json()) as OpenRouterResponsePayload;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((data as any).error) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const errObj = (data as any).error;
+            throw new AIGatewayError(
+              `OpenRouter returned error in 200 payload: ${errObj?.message || JSON.stringify(errObj)}`,
+              "GATEWAY_TEMPORARY_FAILURE",
+              { isRetryable: true, details: errObj },
+            );
+          }
           return { data, attempt, latencyMs };
         }
 

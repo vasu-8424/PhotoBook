@@ -13,27 +13,64 @@ export async function GET(
       return NextResponse.json({ error: "Missing bookId" }, { status: 400 });
     }
 
+    if (bookId.startsWith("demo")) {
+      const { getDemoDesign } = await import("@/lib/editor/demo");
+      const demoDesign = getDemoDesign();
+      return NextResponse.json({
+        design: demoDesign,
+        assets: {
+          demo_asset_cover: { previewUrl: "/file.svg" },
+          demo_asset_01: { previewUrl: "/file.svg" },
+          demo_asset_02: { previewUrl: "/file.svg" },
+          demo_asset_03: { previewUrl: "/file.svg" },
+          demo_asset_04: { previewUrl: "/file.svg" },
+          demo_asset_spread: { previewUrl: "/file.svg" },
+          demo_asset_closing: { previewUrl: "/file.svg" },
+        },
+        model: "demo-preset",
+        promptVersion: "v1.0.0",
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     const repository = getDesignRepository();
     const record = await repository.getDesignByBookId(bookId);
 
     if (!record || !record.designJson) {
-      if (bookId.startsWith("demo")) {
-        const { getDemoDesign } = await import("@/lib/editor/demo");
-        return NextResponse.json({
-          design: getDemoDesign(),
-          model: "demo-preset",
-          promptVersion: "v1.0.0",
-          updatedAt: new Date().toISOString(),
-        });
-      }
       return NextResponse.json(
         { error: "Design not found for this book." },
         { status: 404 },
       );
     }
 
+    // Resolve authorized preview URLs for all image assets in the design
+    const { getStorageProvider, PHOTO_STORAGE_BUCKETS, getPreviewPath } = await import("@/lib/photos");
+    const storage = getStorageProvider();
+    const assets: Record<string, { previewUrl: string }> = {};
+
+    for (const page of record.designJson.pages) {
+      for (const el of page.elements) {
+        if (el.type === "image" && el.assetId && !assets[el.assetId]) {
+          try {
+            const previewPath = getPreviewPath(record.userId || "dev_user_1", bookId, el.assetId);
+            const previewUrl = await storage.createSignedDownloadUrl(
+              PHOTO_STORAGE_BUCKETS.DERIVATIVES,
+              previewPath,
+              { expiresInSeconds: 3600 },
+            );
+            assets[el.assetId] = { previewUrl };
+          } catch {
+            assets[el.assetId] = {
+              previewUrl: `/api/photos/view/${PHOTO_STORAGE_BUCKETS.DERIVATIVES}/${record.userId || "dev_user_1"}/${bookId}/${el.assetId}/preview.jpg`,
+            };
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       design: record.designJson,
+      assets,
       model: record.model,
       promptVersion: record.promptVersion,
       updatedAt: record.updatedAt,

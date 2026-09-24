@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { EditorialPlan } from "./types";
 import type { SchemaValidator } from "@/lib/ai/types";
 
-export const EditorialPhotoRoleSchema = z.enum([
+const VALID_ROLES = [
   "OPENING",
   "HERO",
   "ESTABLISHING",
@@ -12,7 +12,26 @@ export const EditorialPhotoRoleSchema = z.enum([
   "TRANSITION",
   "CLOSING",
   "SUPPORTING",
-]);
+] as const;
+
+export const EditorialPhotoRoleSchema = z.preprocess((val) => {
+  if (typeof val === "string") {
+    const upper = val.toUpperCase().trim();
+    if (VALID_ROLES.includes(upper as (typeof VALID_ROLES)[number])) {
+      return upper;
+    }
+    if (upper.includes("HERO") || upper.includes("FEATURE")) return "HERO";
+    if (upper.includes("OPEN") || upper.includes("START")) return "OPENING";
+    if (upper.includes("CLOSE") || upper.includes("END")) return "CLOSING";
+    if (upper.includes("PORTRAIT")) return "PORTRAIT";
+    if (upper.includes("TRANSITION")) return "TRANSITION";
+    if (upper.includes("DETAIL")) return "DETAIL";
+    if (upper.includes("MOMENT")) return "MOMENT";
+    if (upper.includes("ESTABLISH")) return "ESTABLISHING";
+    return "SUPPORTING";
+  }
+  return val;
+}, z.enum(VALID_ROLES));
 
 export const EditorialPhotoSchema = z.object({
   photoId: z.string().min(1),

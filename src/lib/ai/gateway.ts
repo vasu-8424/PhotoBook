@@ -63,24 +63,96 @@ export class AIGateway {
       actualModel = transportResult.data.model || config.primaryModel;
 
       const choice = transportResult.data.choices?.[0];
-      if (!choice || !choice.message?.content) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = choice?.message as any;
+      const rawContent = msg?.content || msg?.reasoning || msg?.text;
+
+      if (!choice || !rawContent || (typeof rawContent === "string" && rawContent.trim().length === 0)) {
         throw new AIGatewayError(
           "OpenRouter returned empty choices in response.",
-          "CONTENT_REFUSAL",
-          { isRetryable: false, details: transportResult.data },
+          "GATEWAY_TEMPORARY_FAILURE",
+          { isRetryable: true, details: transportResult.data },
         );
       }
 
-      // 5. Parse JSON output
+      // 5. Parse JSON output (with robust preamble / markdown fence cleanup)
       let parsedJson: unknown;
-      try {
-        parsedJson = JSON.parse(choice.message.content);
-      } catch (parseErr) {
-        throw new AIGatewayError(
-          `Failed to parse model response as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
-          "SCHEMA_VALIDATION_ERROR",
-          { isRetryable: false, details: { rawContent: choice.message.content } },
-        );
+      if (typeof rawContent !== "string") {
+        parsedJson = rawContent;
+      } else {
+        const text = rawContent.trim();
+        // Try direct parse first
+        try {
+          parsedJson = JSON.parse(text);
+        } catch {
+          // 1. Try all markdown code fences: ```(?:json)? ... ```
+          const fenceMatches = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi)];
+          // Often reasoning models put notes in early fences and the final JSON in the last fence
+          for (let i = fenceMatches.length - 1; i >= 0; i--) {
+            const fenceContent = fenceMatches[i][1].trim();
+            try {
+              parsedJson = JSON.parse(fenceContent);
+              if (parsedJson && typeof parsedJson === "object") break;
+            } catch {
+              try {
+                // Try removing trailing commas
+                const cleaned = fenceContent.replace(/,(\s*[}\]])/g, "$1");
+                parsedJson = JSON.parse(cleaned);
+                if (parsedJson && typeof parsedJson === "object") break;
+              } catch {
+                // continue
+              }
+            }
+          }
+
+          // 2. If still not parsed, scan for balanced JSON substring candidates
+          if (parsedJson === undefined) {
+            let pos = 0;
+            while ((pos = text.indexOf("{", pos)) !== -1) {
+              let endPos = text.lastIndexOf("}");
+              while (endPos > pos) {
+                const candidate = text.slice(pos, endPos + 1).trim();
+                if (
+                  candidate.includes('"schemaVersion"') ||
+                  candidate.includes('"design"') ||
+                  candidate.includes('"title"') ||
+                  candidate.includes('"visualDescription"') ||
+                  candidate.includes('"document"')
+                ) {
+                  try {
+                    const parsed = JSON.parse(candidate);
+                    if (parsed && typeof parsed === "object") {
+                      parsedJson = parsed;
+                      break;
+                    }
+                  } catch {
+                    try {
+                      const cleaned = candidate.replace(/,(\s*[}\]])/g, "$1");
+                      const parsed = JSON.parse(cleaned);
+                      if (parsed && typeof parsed === "object") {
+                        parsedJson = parsed;
+                        break;
+                      }
+                    } catch {
+                      // continue with next closing brace
+                    }
+                  }
+                }
+                endPos = text.lastIndexOf("}", endPos - 1);
+              }
+              if (parsedJson !== undefined) break;
+              pos++;
+            }
+          }
+
+          if (parsedJson === undefined) {
+            throw new AIGatewayError(
+              `Failed to parse model response as JSON: Model returned non-JSON text starting with "${text.slice(0, 50)}..."`,
+              "SCHEMA_VALIDATION_ERROR",
+              { isRetryable: true, details: { rawContent } },
+            );
+          }
+        }
       }
 
       // 6. Validate output schema
@@ -180,5 +252,26 @@ export class AIGateway {
   }
 }
 
+class DefaultAIGateway extends AIGateway {
+  private customGateway: AIGateway | null = null;
+
+  public setDelegate(gateway: AIGateway | null): void {
+    this.customGateway = gateway;
+  }
+
+  public override async execute<TInput, TOutput>(
+    request: GatewayRequest<TInput, TOutput>,
+  ): Promise<AIJobResult<TOutput>> {
+    if (this.customGateway) {
+      return this.customGateway.execute(request);
+    }
+    return super.execute(request);
+  }
+}
+
 // Default singleton instance
-export const aiGateway = new AIGateway();
+export const aiGateway = new DefaultAIGateway();
+
+export function setGlobalAIGateway(gateway: AIGateway | null): void {
+  aiGateway.setDelegate(gateway);
+}

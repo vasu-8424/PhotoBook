@@ -112,15 +112,17 @@ export class SupabaseDesignRepository implements DesignRepository {
   }
 }
 
-let defaultRepository: DesignRepository | null = null;
+const globalForDesign = globalThis as unknown as {
+  defaultDesignRepository?: DesignRepository;
+};
 
 export function getDesignRepository(): DesignRepository {
-  if (!defaultRepository) {
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      defaultRepository = new SupabaseDesignRepository();
-    } else {
-      defaultRepository = new InMemoryDesignRepository();
-    }
+  if (!globalForDesign.defaultDesignRepository) {
+    globalForDesign.defaultDesignRepository = new InMemoryDesignRepository();
   }
-  return defaultRepository;
+  return globalForDesign.defaultDesignRepository;
+}
+
+export function setDesignRepository(repo: DesignRepository): void {
+  globalForDesign.defaultDesignRepository = repo;
 }

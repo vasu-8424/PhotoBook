@@ -56,8 +56,9 @@ export function validateAIDerivativeBoundary(urlOrPath: string): void {
     );
   }
 
-  // Must contain ai.jpg or be an approved AI derivative path
+  // Must contain ai.jpg, be an approved derivative bucket path, or be an encoded data URI
   const isAiDerivative =
+    lower.startsWith("data:image/") ||
     lower.includes("ai.jpg") ||
     lower.includes("/ai.") ||
     lower.includes(PHOTO_STORAGE_BUCKETS.DERIVATIVES.toLowerCase());

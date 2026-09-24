@@ -223,15 +223,19 @@ export class SupabaseStorageProvider implements StorageProvider {
   }
 }
 
-// Global active storage provider (defaults to InMemory for dev/testing unless set)
-let activeStorageProvider: StorageProvider = new InMemoryStorageProvider();
+const globalForPhotos = globalThis as unknown as {
+  activeStorageProvider?: StorageProvider;
+};
 
 export function setStorageProvider(provider: StorageProvider): void {
-  activeStorageProvider = provider;
+  globalForPhotos.activeStorageProvider = provider;
 }
 
 export function getStorageProvider(): StorageProvider {
-  return activeStorageProvider;
+  if (!globalForPhotos.activeStorageProvider) {
+    globalForPhotos.activeStorageProvider = new InMemoryStorageProvider();
+  }
+  return globalForPhotos.activeStorageProvider;
 }
 
 // High-level cleanup helpers
