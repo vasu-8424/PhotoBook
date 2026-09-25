@@ -802,3 +802,13 @@ export async function runExportTests(): Promise<{
 
   return { passed, failed, errors };
 }
+
+// Auto-run when executed directly via CLI
+if (
+  process.argv[1]?.includes("run-export-test")
+) {
+  runExportTests().catch((err) => {
+    console.error("Test suite threw uncaught error:", err);
+    process.exit(1);
+  });
+}
