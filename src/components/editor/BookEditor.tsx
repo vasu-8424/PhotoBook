@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { BookDesign, BookPage, TextElement } from "@/types/design";
 import {
@@ -30,6 +30,7 @@ import type {
   SaveStatus,
   TypographyUpdates,
 } from "@/lib/editor/types";
+import type { PdfExportStatus, PdfExportStep } from "@/lib/export/types";
 import { EditorToolbar } from "./EditorToolbar";
 import { PageNavigator } from "./PageNavigator";
 import { ElementInspector } from "./ElementInspector";
@@ -41,6 +42,22 @@ const EditorCanvasDynamic = dynamic(
   { ssr: false },
 );
 
+// Export polling interval (ms)
+const EXPORT_POLL_INTERVAL_MS = 2000;
+const EXPORT_TERMINAL_STATUSES: PdfExportStatus[] = ["SUCCEEDED", "FAILED", "EXPIRED"];
+
+export interface ExportState {
+  exportId: string;
+  jobId?: string;
+  status: PdfExportStatus;
+  progress: number;
+  currentStep: PdfExportStep;
+  designHash?: string;
+  pageCount?: number;
+  fileSizeBytes?: number;
+  errorCode?: string;
+}
+
 export interface BookEditorProps {
   initialDesign: BookDesign;
   bookId: string;
@@ -48,6 +65,7 @@ export interface BookEditorProps {
   protectedPhotoIds?: string[];
   initialAssets?: Record<string, { previewUrl: string; width?: number; height?: number }>;
   onSave?: (design: BookDesign) => Promise<boolean>;
+  /** Legacy prop — kept for backward compat, export now goes through server */
   onExportPdf?: (design: BookDesign) => Promise<void>;
 }
 
@@ -58,7 +76,8 @@ export const BookEditor: React.FC<BookEditorProps> = ({
   protectedPhotoIds = [],
   initialAssets = {},
   onSave,
-  onExportPdf,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onExportPdf: _onExportPdf, // kept for backward compat; export now uses server API
 }) => {
   const [historyState, setHistoryState] = useState(() => createHistory(initialDesign));
   const currentDesign = historyState.present;
@@ -79,7 +98,14 @@ export const BookEditor: React.FC<BookEditorProps> = ({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("SAVED");
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>(undefined);
   const [saveError, setSaveError] = useState<string | undefined>(undefined);
+
+  // Part 10: Async export state
+  const [exportState, setExportState] = useState<ExportState | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string | undefined>(undefined);
+  const exportPollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Stable ref for the polling function to avoid useCallback circularity
+  const pollFnRef = useRef<((exportId: string) => void) | null>(null);
 
   // Asset map mapping assetId -> EditorAsset
   const assetMap: EditorAssetMap = useMemo(() => {
@@ -226,20 +252,119 @@ export const BookEditor: React.FC<BookEditorProps> = ({
     autosaveControllerRef.current?.scheduleSave(next.present);
   }, [historyState]);
 
-  // Export PDF handler
-  const handleExportPdf = async () => {
-    if (!onExportPdf) return;
-    setIsExportingPdf(true);
+  // Part 10: Poll export status from server
+  const pollExportStatus = useCallback(async (exportId: string) => {
     try {
-      // Flush any pending autosave first
-      await autosaveControllerRef.current?.flush();
-      await onExportPdf(currentDesign);
-    } catch (err) {
-      alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsExportingPdf(false);
+      const res = await fetch(`/api/books/${bookId}/export`);
+      if (!res.ok) return;
+      const data: ExportState = await res.json();
+      setExportState(data);
+
+      if (!EXPORT_TERMINAL_STATUSES.includes(data.status)) {
+        // Continue polling via stable ref to avoid hook circularity
+        exportPollTimerRef.current = setTimeout(
+          () => pollFnRef.current?.(exportId),
+          EXPORT_POLL_INTERVAL_MS,
+        );
+      } else {
+        // Terminal: stop polling and update UI
+        setIsExportingPdf(false);
+        if (data.status === "FAILED") {
+          setExportError(data.errorCode || "Export failed. Please try again.");
+        }
+      }
+    } catch {
+      // Network error during poll — retry
+      exportPollTimerRef.current = setTimeout(
+        () => pollFnRef.current?.(exportId),
+        EXPORT_POLL_INTERVAL_MS * 2,
+      );
     }
-  };
+  }, [bookId]);
+
+  // Keep the stable ref up to date (MUST be in useLayoutEffect, not render)
+  useLayoutEffect(() => {
+    pollFnRef.current = pollExportStatus;
+  });
+
+  // Cleanup export poll on unmount
+  useEffect(() => {
+    return () => {
+      if (exportPollTimerRef.current) {
+        clearTimeout(exportPollTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Part 10: Handle Download PDF
+  const handleDownloadPdf = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/books/${bookId}/export/download`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to get download link.");
+      }
+      const data: { signedUrl: string } = await res.json();
+      // Open in new tab to trigger browser download
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Download failed.");
+    }
+  }, [bookId]);
+
+  // Part 10: Async export handler — flushes save first, then delegates to server
+  const handleExportPdf = useCallback(async () => {
+    setExportError(undefined);
+    setExportState(null);
+    setIsExportingPdf(true);
+
+    try {
+      // 1. Flush any pending autosave — export must use persisted state
+      await autosaveControllerRef.current?.flush();
+
+      // 2. Trigger server-side async export
+      const res = await fetch(`/api/books/${bookId}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to trigger PDF export.");
+      }
+
+      const { exportId, status, designHash } = data as {
+        exportId: string;
+        status: PdfExportStatus;
+        designHash: string;
+        reused?: boolean;
+      };
+
+      setExportState({
+        exportId,
+        jobId: data.jobId,
+        status,
+        progress: status === "SUCCEEDED" ? 100 : 0,
+        currentStep: status === "SUCCEEDED" ? "COMPLETE" : "LOADING",
+        designHash,
+      });
+
+      // 3. If already SUCCEEDED (reused), stop; else start polling
+      if (status === "SUCCEEDED") {
+        setIsExportingPdf(false);
+        return;
+      }
+
+      exportPollTimerRef.current = setTimeout(
+        () => pollExportStatus(exportId),
+        EXPORT_POLL_INTERVAL_MS,
+      );
+    } catch (err) {
+      setIsExportingPdf(false);
+      setExportError(err instanceof Error ? err.message : "Export failed.");
+    }
+  }, [bookId, pollExportStatus]);
 
   // Keyboard shortcuts (Undo, Redo, Deselect)
   useEffect(() => {
@@ -280,6 +405,20 @@ export const BookEditor: React.FC<BookEditorProps> = ({
     return { left, right, spread: activeSpread };
   }, [currentDesign, currentPage]);
 
+  const exportReady = exportState?.status === "SUCCEEDED";
+  const exportFailed = exportState?.status === "FAILED";
+  const exportRunning = isExportingPdf || (
+    exportState && !["SUCCEEDED", "FAILED", "EXPIRED"].includes(exportState.status)
+  );
+
+  const exportStepLabel: Record<string, string> = {
+    LOADING: "Loading design…",
+    VALIDATING: "Validating…",
+    RENDERING: "Rendering pages…",
+    FINALIZING: "Finalizing PDF…",
+    COMPLETE: "PDF Ready",
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
       {/* Top Toolbar */}
@@ -307,8 +446,69 @@ export const BookEditor: React.FC<BookEditorProps> = ({
         lastSavedAt={lastSavedAt}
         errorMessage={saveError}
         onExportPdf={handleExportPdf}
-        isExportingPdf={isExportingPdf}
+        isExportingPdf={!!exportRunning}
+        exportReady={exportReady}
+        onDownloadPdf={handleDownloadPdf}
       />
+
+      {/* Export Status Strip */}
+      {(exportState || exportError) && (
+        <div className={`px-4 py-2 flex items-center gap-3 text-xs shrink-0 ${
+          exportReady
+            ? "bg-emerald-900/40 border-b border-emerald-700/50 text-emerald-300"
+            : exportFailed || exportError
+            ? "bg-rose-900/40 border-b border-rose-700/50 text-rose-300"
+            : "bg-slate-800 border-b border-slate-700 text-slate-300"
+        }`}>
+          {exportRunning && (
+            <div className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin shrink-0" />
+          )}
+          {exportReady && (
+            <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          {(exportFailed || exportError) && !exportReady && (
+            <svg className="w-4 h-4 text-rose-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+
+          <span className="flex-1">
+            {exportError
+              ? exportError
+              : exportState
+              ? exportStepLabel[exportState.currentStep] || exportState.currentStep
+              : ""}
+          </span>
+
+          {exportState && !exportFailed && !exportError && exportState.progress > 0 && !exportReady && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-24 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                  style={{ width: `${exportState.progress}%` }}
+                />
+              </div>
+              <span className="font-mono text-[10px] text-slate-400">{Math.round(exportState.progress)}%</span>
+            </div>
+          )}
+
+          {exportReady && (
+            <button
+              type="button"
+              id="download-pdf-btn"
+              onClick={handleDownloadPdf}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download PDF
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -373,3 +573,4 @@ export const BookEditor: React.FC<BookEditorProps> = ({
     </div>
   );
 };
+
