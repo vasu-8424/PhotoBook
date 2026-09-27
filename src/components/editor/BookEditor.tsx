@@ -35,6 +35,13 @@ import { EditorToolbar } from "./EditorToolbar";
 import { PageNavigator } from "./PageNavigator";
 import { ElementInspector } from "./ElementInspector";
 import { SpreadViewer } from "./SpreadViewer";
+import { TemplateBrowserModal } from "./TemplateBrowserModal";
+import {
+  changePageLayout,
+  recompileBookTheme,
+  buildPhotoLayoutProfile,
+  ALL_TEMPLATES,
+} from "@/lib/design";
 
 // Dynamic client-side import for Konva Canvas to ensure zero SSR canvas issues
 const EditorCanvasDynamic = dynamic(
@@ -98,6 +105,11 @@ export const BookEditor: React.FC<BookEditorProps> = ({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("SAVED");
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>(undefined);
   const [saveError, setSaveError] = useState<string | undefined>(undefined);
+
+  // Part 10.5 Design System State
+  const [isTemplateBrowserOpen, setIsTemplateBrowserOpen] = useState<boolean>(false);
+  const [currentThemeId, setCurrentThemeId] = useState<string>("WARM_EDITORIAL");
+  const [currentTypographyId, setCurrentTypographyId] = useState<string>("EDITORIAL_SERIF");
 
   // Part 10: Async export state
   const [exportState, setExportState] = useState<ExportState | null>(null);
@@ -236,6 +248,76 @@ export const BookEditor: React.FC<BookEditorProps> = ({
       alert(res.error);
     }
   }, [currentDesign, currentPage.id, selectedElementId, protectedPhotoIds, applyMutation]);
+
+  // Part 10.5 Design System Handlers
+  const handleSelectTemplate = useCallback(
+    (templateId: string) => {
+      const profiles = Object.keys(initialAssets).map((aid) => {
+        const a = initialAssets[aid];
+        return buildPhotoLayoutProfile(aid, {
+          asset: { width: a.width, height: a.height },
+        });
+      });
+
+      const updated = changePageLayout(
+        currentDesign,
+        selectedPageId,
+        templateId,
+        profiles,
+        currentThemeId,
+        currentTypographyId,
+      );
+
+      applyMutation(updated);
+    },
+    [currentDesign, selectedPageId, initialAssets, currentThemeId, currentTypographyId, applyMutation],
+  );
+
+  const handleSelectTheme = useCallback(
+    (themeId: string) => {
+      setCurrentThemeId(themeId);
+      const updated = recompileBookTheme(currentDesign, themeId, currentTypographyId);
+      applyMutation(updated);
+    },
+    [currentDesign, currentTypographyId, applyMutation],
+  );
+
+  const handleSelectTypography = useCallback(
+    (typoId: string) => {
+      setCurrentTypographyId(typoId);
+      const updated = recompileBookTheme(currentDesign, currentThemeId, typoId);
+      applyMutation(updated);
+    },
+    [currentDesign, currentThemeId, applyMutation],
+  );
+
+  const handleRegeneratePage = useCallback(() => {
+    const profiles = Object.keys(initialAssets).map((aid) => {
+      const a = initialAssets[aid];
+      return buildPhotoLayoutProfile(aid, {
+        asset: { width: a.width, height: a.height },
+      });
+    });
+
+    const pagePhotoCount = currentPage.elements.filter((e) => e.type === "image").length || 1;
+    const compatible = ALL_TEMPLATES.filter(
+      (t) => t.minPhotos <= pagePhotoCount && t.maxPhotos >= pagePhotoCount && t.id !== currentPage.layoutType,
+    );
+    const pool = compatible.length > 0 ? compatible : ALL_TEMPLATES;
+    const nextTemplate = pool[Math.floor(Math.random() * pool.length)];
+
+    if (nextTemplate) {
+      const updated = changePageLayout(
+        currentDesign,
+        selectedPageId,
+        nextTemplate.id,
+        profiles,
+        currentThemeId,
+        currentTypographyId,
+      );
+      applyMutation(updated);
+    }
+  }, [currentDesign, selectedPageId, currentPage, initialAssets, currentThemeId, currentTypographyId, applyMutation]);
 
   // Undo / Redo handlers
   const handleUndo = useCallback(() => {
@@ -449,6 +531,7 @@ export const BookEditor: React.FC<BookEditorProps> = ({
         isExportingPdf={!!exportRunning}
         exportReady={exportReady}
         onDownloadPdf={handleDownloadPdf}
+        onOpenTemplateBrowser={() => setIsTemplateBrowserOpen(true)}
       />
 
       {/* Export Status Strip */}
@@ -570,6 +653,19 @@ export const BookEditor: React.FC<BookEditorProps> = ({
           />
         )}
       </div>
+      {/* Part 10.5 Design System & Template Browser Modal */}
+      <TemplateBrowserModal
+        isOpen={isTemplateBrowserOpen}
+        onClose={() => setIsTemplateBrowserOpen(false)}
+        currentPage={currentPage}
+        currentDesign={currentDesign}
+        onSelectTemplate={handleSelectTemplate}
+        onSelectTheme={handleSelectTheme}
+        onSelectTypography={handleSelectTypography}
+        onRegeneratePage={handleRegeneratePage}
+        currentThemeId={currentThemeId}
+        currentTypographyId={currentTypographyId}
+      />
     </div>
   );
 };

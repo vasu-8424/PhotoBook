@@ -35,6 +35,7 @@ interface EditorToolbarProps {
   /** True when a SUCCEEDED export exists — enables Download button */
   exportReady?: boolean;
   onDownloadPdf?: () => void;
+  onOpenTemplateBrowser?: () => void;
 }
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
@@ -64,6 +65,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   isExportingPdf,
   exportReady = false,
   onDownloadPdf,
+  onOpenTemplateBrowser,
 }) => {
   return (
     <header className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 select-none text-xs">
@@ -162,6 +164,21 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
               Gutter
             </button>
           </div>
+        )}
+
+        {/* Design System & Templates Modal Button */}
+        {onOpenTemplateBrowser && (
+          <button
+            type="button"
+            onClick={onOpenTemplateBrowser}
+            title="Open Editorial Design System (Templates, Themes, Typography)"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all font-medium text-xs"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+            </svg>
+            <span>Design</span>
+          </button>
         )}
       </div>
 

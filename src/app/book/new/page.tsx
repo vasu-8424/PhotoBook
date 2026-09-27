@@ -19,6 +19,8 @@ export default function NewBookPage() {
   const [title, setTitle] = useState("Autumn Mountain Journey");
   const [occasion, setOccasion] = useState<BookOccasion>("TRAVEL");
   const [style, setStyle] = useState<BookStyle>("EDITORIAL");
+  const [themeId, setThemeId] = useState<string>("WARM_EDITORIAL");
+  const [typographyId, setTypographyId] = useState<string>("EDITORIAL_SERIF");
   const [size, setSize] = useState<BookSize>("A4");
   const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -237,21 +239,98 @@ export default function NewBookPage() {
           {/* Style */}
           <div className="space-y-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Editorial Style System
+              Editorial Style
             </label>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              {(["EDITORIAL", "CINEMATIC", "MINIMAL", "JOURNAL"] as BookStyle[]).map((st) => (
+              {(
+                [
+                  { id: "EDITORIAL", label: "Editorial", desc: "Classic magazine storytelling", thm: "WARM_EDITORIAL", typo: "EDITORIAL_SERIF" },
+                  { id: "CINEMATIC", label: "Cinematic", desc: "Dramatic widescreen moments", thm: "MIDNIGHT_CINEMATIC", typo: "CINEMATIC" },
+                  { id: "MINIMAL", label: "Minimal", desc: "Pure gallery negative space", thm: "MONOCHROME", typo: "MODERN_SANS" },
+                  { id: "JOURNAL", label: "Journal", desc: "Explorer notebook & field notes", thm: "FOREST", typo: "JOURNAL" },
+                ] as const
+              ).map((st) => (
                 <button
                   type="button"
-                  key={st}
-                  onClick={() => setStyle(st)}
-                  className={`p-2.5 rounded-lg border font-medium transition text-left ${
-                    style === st
-                      ? "bg-indigo-600/20 border-indigo-500 text-white"
+                  key={st.id}
+                  onClick={() => {
+                    setStyle(st.id as BookStyle);
+                    setThemeId(st.thm);
+                    setTypographyId(st.typo);
+                  }}
+                  className={`p-3 rounded-xl border text-left transition ${
+                    style === st.id
+                      ? "bg-indigo-600/20 border-indigo-500 text-white shadow-sm"
                       : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  {st}
+                  <div className="font-semibold text-xs">{st.label}</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">{st.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Visual Theme Selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Visual Theme & Palette
+            </label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                { id: "WARM_EDITORIAL", label: "Warm Editorial", bg: "#F5F1EA", accent: "#B76E4C" },
+                { id: "SOFT_SAND", label: "Soft Sand", bg: "#F2EEE7", accent: "#C6A77B" },
+                { id: "MONOCHROME", label: "Monochrome", bg: "#F7F7F5", accent: "#222222" },
+                { id: "FOREST", label: "Forest", bg: "#EEF1EA", accent: "#879B7D" },
+                { id: "DUSTY_ROSE", label: "Dusty Rose", bg: "#F5ECEB", accent: "#B68C91" },
+                { id: "MIDNIGHT_CINEMATIC", label: "Midnight", bg: "#151515", accent: "#B28B5E" },
+              ].map((thm) => (
+                <button
+                  type="button"
+                  key={thm.id}
+                  onClick={() => setThemeId(thm.id)}
+                  className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2.5 ${
+                    themeId === thm.id
+                      ? "bg-zinc-800 border-indigo-500 text-white shadow-sm"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="flex items-center -space-x-1 shrink-0">
+                    <span className="w-3.5 h-3.5 rounded-full border border-black/40" style={{ backgroundColor: thm.bg }} />
+                    <span className="w-3.5 h-3.5 rounded-full border border-black/40" style={{ backgroundColor: thm.accent }} />
+                  </div>
+                  <span className="text-[11px] font-medium truncate">{thm.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Typography Mood */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Typography Mood
+            </label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                { id: "EDITORIAL_SERIF", label: "Editorial Serif", sample: "Serif Classic" },
+                { id: "MODERN_SANS", label: "Modern Sans", sample: "Clean Swiss" },
+                { id: "LUXURY_SERIF", label: "Luxury", sample: "Haute Couture" },
+                { id: "CINEMATIC", label: "Cinematic", sample: "Wide Title" },
+                { id: "ROMANTIC", label: "Romantic", sample: "Lyrical Flow" },
+                { id: "JOURNAL", label: "Journal", sample: "Notebook Stamp" },
+              ].map((tp) => (
+                <button
+                  type="button"
+                  key={tp.id}
+                  onClick={() => setTypographyId(tp.id)}
+                  className={`p-2.5 rounded-xl border text-left transition ${
+                    typographyId === tp.id
+                      ? "bg-zinc-800 border-indigo-500 text-white shadow-sm"
+                      : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold">{tp.label}</div>
+                  <div className="text-[10px] text-zinc-500">{tp.sample}</div>
                 </button>
               ))}
             </div>
