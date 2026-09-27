@@ -99,6 +99,8 @@ export function getUserFriendlyExportError(code: PdfExportErrorCode): string {
       return "The magazine design could not be validated for print. Please save your changes and try again.";
     case "PDF_EXPORT_ASSET_MISSING":
       return "One or more photos required for export could not be found. Please re-upload any missing photos.";
+    case "PDF_EXPORT_ASSET_INVALID":
+      return "One or more photos could not be processed for export. The image data is corrupted, empty, or an unsupported placeholder.";
     case "PDF_EXPORT_ASSET_UNAUTHORIZED":
       return "One or more photos in this export are not authorized for your account.";
     case "PDF_EXPORT_FONT_ERROR":

@@ -16,6 +16,9 @@
  *   - Download URL generation
  */
 
+import fs from "fs";
+import path from "path";
+import sharp from "sharp";
 import {
   InMemoryPdfExportRepository,
 } from "../repository";
@@ -25,7 +28,19 @@ import {
   setBookRepository,
   setJobRepository,
 } from "../../jobs/storage";
-import { triggerPdfExport, runPdfExportWorker, validateDesignForExport } from "../service";
+import {
+  triggerPdfExport,
+  runPdfExportWorker,
+  validateDesignForExport,
+  resolveAssets,
+} from "../service";
+import { renderDocument } from "@/lib/pdf";
+import {
+  InMemoryStorageProvider,
+  setStorageProvider,
+  getPreviewPath,
+  PHOTO_STORAGE_BUCKETS,
+} from "@/lib/photos";
 import { computeDesignHash } from "../hash";
 import { validatePdfArtifact } from "../validate-pdf";
 import { PdfExportError } from "../errors";
@@ -690,6 +705,301 @@ async function testRetryCreatesFreshExecution() {
 }
 
 // -----------------------------------------------------------------------
+// Section F: Real Photo Asset Resolution & Regression Verification
+// -----------------------------------------------------------------------
+
+async function testDirectRealPhotoAssetResolution() {
+  const fixturesDir = path.join(process.cwd(), "tests", "fixtures", "photos");
+  const photoPath = path.join(fixturesDir, "photo_01_mountain.jpg");
+  assert(fs.existsSync(photoPath), "photo_01_mountain.jpg fixture must exist");
+
+  const realBytes = fs.readFileSync(photoPath);
+  const storage = new InMemoryStorageProvider();
+  setStorageProvider(storage);
+
+  const userId = "usr_real_photo_test";
+  const bookId = "bk_real_photo_test";
+  const assetId = "ast_real_mountain_01";
+
+  // Upload to storage as the photo pipeline does
+  const storagePath = getPreviewPath(userId, bookId, assetId);
+  await storage.uploadFile(
+    PHOTO_STORAGE_BUCKETS.DERIVATIVES,
+    storagePath,
+    realBytes,
+    "image/jpeg",
+  );
+
+  // Build design with image element referencing assetId
+  const design: BookDesign = makeMinimalDesign(bookId, 2);
+  design.pages[0].elements = [
+    {
+      id: "el_img_1",
+      type: "image",
+      assetId,
+      xMm: 10,
+      yMm: 10,
+      widthMm: 190,
+      heightMm: 277,
+      fit: "COVER",
+      focalPoint: { x: 0.5, y: 0.5 },
+    },
+  ];
+
+  // 1. Resolve through production resolveAssets
+  const assets = await resolveAssets(design, userId, bookId, storage);
+  assert(assets.has(assetId), "Asset map must contain resolved assetId");
+
+  const resolved = assets.get(assetId)!;
+  assert(resolved.mimeType === "image/jpeg", `Expected JPEG, got ${resolved.mimeType}`);
+  assert(resolved.bytes.length === realBytes.length, "Resolved bytes length must match real photo");
+
+  // 2. Check magic bytes FF D8 FF
+  assert(
+    resolved.bytes[0] === 0xff && resolved.bytes[1] === 0xd8 && resolved.bytes[2] === 0xff,
+    "Magic bytes must be JPEG (FF D8 FF)",
+  );
+
+  // 3. Inspect with Sharp
+  const meta = await sharp(resolved.bytes).metadata();
+  assert(meta.format === "jpeg", `Format must be jpeg, got ${meta.format}`);
+  assert(meta.width === 1600, `Width must be 1600, got ${meta.width}`);
+  assert(meta.height === 1200, `Height must be 1200, got ${meta.height}`);
+  assert(meta.channels === 3, `Channels must be 3, got ${meta.channels}`);
+
+  // 4. Verify varied pixel data (not a solid green placeholder)
+  const raw = await sharp(resolved.bytes).raw().toBuffer();
+  let isUniform = true;
+  for (let i = 4; i < Math.min(raw.length, 1000); i += 3) {
+    if (raw[i] !== raw[0] || raw[i + 1] !== raw[1] || raw[i + 2] !== raw[2]) {
+      isUniform = false;
+      break;
+    }
+  }
+  assert(!isUniform, "Real photograph must have varied pixels (not uniform placeholder)");
+
+  // 5. Pass into Part 2 image renderer and generate PDF
+  const renderResult = await renderDocument(design, assets);
+  assert(renderResult.pdfBytes.length > 0, "PDF bytes must be non-empty");
+
+  // 6. Structural validation
+  await validatePdfArtifact(renderResult.pdfBytes, {
+    expectedPageCount: 2,
+    expectedWidthMm: 210,
+    expectedHeightMm: 297,
+  });
+
+  console.log(`    Resolved asset: ${assetId} (${resolved.width}x${resolved.height} ${resolved.mimeType})`);
+  console.log(`    Generated PDF size: ${renderResult.pdfBytes.length} bytes (2 pages)`);
+}
+
+async function testUnknownAssetIdThrowsMissing() {
+  const storage = new InMemoryStorageProvider();
+  setStorageProvider(storage);
+
+  const design: BookDesign = makeMinimalDesign("bk_missing_test", 1);
+  design.pages[0].elements = [
+    {
+      id: "el_missing_img",
+      type: "image",
+      assetId: "completely_unknown_asset_id_99999",
+      xMm: 10,
+      yMm: 10,
+      widthMm: 100,
+      heightMm: 100,
+      fit: "COVER",
+    },
+  ];
+
+  let threw = false;
+  try {
+    await resolveAssets(design, "user_test", "bk_missing_test", storage);
+  } catch (err: unknown) {
+    threw = true;
+    assert(err instanceof PdfExportError, "Must throw PdfExportError");
+    assert(
+      (err as PdfExportError).code === "PDF_EXPORT_ASSET_MISSING",
+      `Expected PDF_EXPORT_ASSET_MISSING, got ${(err as PdfExportError).code}`,
+    );
+  }
+  assert(threw, "resolveAssets must throw PDF_EXPORT_ASSET_MISSING for unknown assetId");
+}
+
+async function testSolidGreenPlaceholderRejected() {
+  const storage = new InMemoryStorageProvider();
+  setStorageProvider(storage);
+
+  const userId = "usr_green_test";
+  const bookId = "bk_green_test";
+  const assetId = "ast_green_placeholder";
+
+  // 1x1 bright green PNG
+  const greenPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  const storagePath = getPreviewPath(userId, bookId, assetId);
+  await storage.uploadFile(
+    PHOTO_STORAGE_BUCKETS.DERIVATIVES,
+    storagePath,
+    greenPng,
+    "image/png",
+  );
+
+  const design: BookDesign = makeMinimalDesign(bookId, 1);
+  design.pages[0].elements = [
+    {
+      id: "el_green_img",
+      type: "image",
+      assetId,
+      xMm: 10,
+      yMm: 10,
+      widthMm: 100,
+      heightMm: 100,
+      fit: "COVER",
+    },
+  ];
+
+  let threw = false;
+  try {
+    await resolveAssets(design, userId, bookId, storage);
+  } catch (err: unknown) {
+    threw = true;
+    assert(err instanceof PdfExportError, "Must throw PdfExportError");
+    assert(
+      (err as PdfExportError).code === "PDF_EXPORT_ASSET_INVALID",
+      `Expected PDF_EXPORT_ASSET_INVALID, got ${(err as PdfExportError).code}`,
+    );
+  }
+  assert(threw, "resolveAssets must strictly reject solid green placeholders");
+}
+
+async function testCorruptedImageBytesRejected() {
+  const storage = new InMemoryStorageProvider();
+  setStorageProvider(storage);
+
+  const userId = "usr_corrupted_test";
+  const bookId = "bk_corrupted_test";
+  const assetId = "ast_corrupted_bytes";
+
+  // Invalid bytes
+  const garbage = Buffer.from("NOT_A_VALID_IMAGE_FILE_JUST_GARBAGE_BYTES_1234567890");
+
+  const storagePath = getPreviewPath(userId, bookId, assetId);
+  await storage.uploadFile(
+    PHOTO_STORAGE_BUCKETS.DERIVATIVES,
+    storagePath,
+    garbage,
+    "image/jpeg",
+  );
+
+  const design: BookDesign = makeMinimalDesign(bookId, 1);
+  design.pages[0].elements = [
+    {
+      id: "el_corrupt_img",
+      type: "image",
+      assetId,
+      xMm: 10,
+      yMm: 10,
+      widthMm: 100,
+      heightMm: 100,
+      fit: "COVER",
+    },
+  ];
+
+  let threw = false;
+  try {
+    await resolveAssets(design, userId, bookId, storage);
+  } catch (err: unknown) {
+    threw = true;
+    assert(err instanceof PdfExportError, "Must throw PdfExportError");
+    assert(
+      (err as PdfExportError).code === "PDF_EXPORT_ASSET_INVALID",
+      `Expected PDF_EXPORT_ASSET_INVALID, got ${(err as PdfExportError).code}`,
+    );
+  }
+  assert(threw, "resolveAssets must reject corrupted bytes with PDF_EXPORT_ASSET_INVALID");
+}
+
+async function testFullExportPipelineWithRealPhotos() {
+  const { bookRepo, exportRepo } = setupRepos();
+  const bookId = "book_with_real_photos_1";
+  const userId = "user_real_photos_1";
+
+  const storage = new InMemoryStorageProvider();
+  setStorageProvider(storage);
+
+  // Upload 2 real photos into storage
+  const fixturesDir = path.join(process.cwd(), "tests", "fixtures", "photos");
+  const photo1Bytes = fs.readFileSync(path.join(fixturesDir, "photo_01_mountain.jpg"));
+  const photo2Bytes = fs.readFileSync(path.join(fixturesDir, "photo_02_sunset.jpg"));
+
+  const asset1 = "ast_photo_mountain_1";
+  const asset2 = "ast_photo_sunset_2";
+
+  await storage.uploadFile(
+    PHOTO_STORAGE_BUCKETS.DERIVATIVES,
+    getPreviewPath(userId, bookId, asset1),
+    photo1Bytes,
+    "image/jpeg",
+  );
+  await storage.uploadFile(
+    PHOTO_STORAGE_BUCKETS.DERIVATIVES,
+    getPreviewPath(userId, bookId, asset2),
+    photo2Bytes,
+    "image/jpeg",
+  );
+
+  await bookRepo.createBook(makeBook(bookId, userId, "EDITING"));
+
+  const { setDesignForTest } = await importDesignTestHelper();
+  const design = makeMinimalDesign(bookId, 4);
+
+  // Page 1: Hero image (mountain)
+  design.pages[0].elements = [
+    {
+      id: "p1_hero_img",
+      type: "image",
+      assetId: asset1,
+      xMm: 0,
+      yMm: 0,
+      widthMm: 210,
+      heightMm: 180,
+      fit: "COVER",
+      focalPoint: { x: 0.5, y: 0.4 },
+    },
+  ];
+
+  // Page 2: Split image (sunset)
+  design.pages[1].elements = [
+    {
+      id: "p2_split_img",
+      type: "image",
+      assetId: asset2,
+      xMm: 10,
+      yMm: 10,
+      widthMm: 190,
+      heightMm: 130,
+      fit: "COVER",
+    },
+  ];
+
+  setDesignForTest(bookId, design);
+
+  const { exportId, jobId } = await triggerPdfExport(bookId, userId);
+  await runPdfExportWorker(exportId, bookId, userId, jobId);
+
+  const record = await exportRepo.getById(exportId);
+  assert(record !== null, "Export record must exist");
+  assert(record!.status === "SUCCEEDED", `Export must SUCCEED, got ${record!.status}`);
+  assert(record!.pageCount === 4, `Expected 4 pages, got ${record!.pageCount}`);
+  assert(record!.fileSizeBytes !== undefined && record!.fileSizeBytes > 10000, `Expected real photo PDF size > 10KB, got ${record!.fileSizeBytes}B`);
+
+  console.log(`    Real photo PDF exported: ${record!.fileSizeBytes} bytes (${record!.pageCount} pages)`);
+}
+
+// -----------------------------------------------------------------------
 // Design Test Helper (minimal mock for getDesignRepository)
 // -----------------------------------------------------------------------
 
@@ -750,11 +1060,31 @@ async function patchDesignRepo() {
 // Main
 // -----------------------------------------------------------------------
 
+let activeTestRun: Promise<{ passed: number; failed: number; errors: string[] }> | null = null;
+
 export async function runExportTests(): Promise<{
   passed: number;
   failed: number;
   errors: string[];
 }> {
+  if (activeTestRun) {
+    return activeTestRun;
+  }
+  activeTestRun = executeExportTests().finally(() => {
+    activeTestRun = null;
+  });
+  return activeTestRun;
+}
+
+async function executeExportTests(): Promise<{
+  passed: number;
+  failed: number;
+  errors: string[];
+}> {
+  passed = 0;
+  failed = 0;
+  errors.length = 0;
+
   console.log("\n=================================================================");
   console.log("PART 10 — PDF EXPORT & PRINT DELIVERY ENGINE — TEST SUITE");
   console.log("=================================================================\n");
@@ -791,6 +1121,13 @@ export async function runExportTests(): Promise<{
   await test("Full export pipeline — Square 210x210mm format", testExportSquareFormat);
   await test("Export failure resets book.status to EDITING (not FAILED)", testExportFailureResetsBookStatus);
   await test("Retry creates fresh execution (FAILED job not resurrected)", testRetryCreatesFreshExecution);
+
+  console.log("\nSection F: Real Photo Asset Resolution & Regression Verification");
+  await test("Direct real photo asset resolution (JPEG magic bytes + Sharp decoding + PDF embedding)", testDirectRealPhotoAssetResolution);
+  await test("Unknown assetId strictly throws PDF_EXPORT_ASSET_MISSING (no fallback to green)", testUnknownAssetIdThrowsMissing);
+  await test("Solid green placeholder strictly rejected with PDF_EXPORT_ASSET_INVALID", testSolidGreenPlaceholderRejected);
+  await test("Corrupted/garbage image bytes rejected with PDF_EXPORT_ASSET_INVALID", testCorruptedImageBytesRejected);
+  await test("Full PDF export pipeline with real uploaded photographs (cover + page photos)", testFullExportPipelineWithRealPhotos);
 
   console.log("\n=================================================================");
   console.log(`RESULTS: ${passed} passed, ${failed} failed`);
